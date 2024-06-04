@@ -1,125 +1,243 @@
+import 'dart:io';
+import 'package:classified_apps/apps/data/remote_urls.dart';
+import 'package:classified_apps/apps/global_widget/firebase_options.dart';
+import 'package:classified_apps/apps/views/splash/localization/app_localizations_setup.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'apps/bindings/app_bindings.dart';
+import 'apps/core/utils/my_theme.dart';
+import 'apps/routes/pages.dart';
+import 'apps/routes/routes.dart';
 
-void main() {
-  runApp(const MyApp());
+late final SharedPreferences sharedPreferences;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  Stripe.publishableKey =
+      'pk_test_51LtUkeIH2i6FoGaE6IFfIDMGyP5Tnzm5fT4HM0340Eu8NnufyOmyvqBn14BRihpYaPdUrcVniN3AkmHZPFjLhR8t00QIxImi8s';
+
+  await dotenv.load(fileName: "assets/.env");
+  sharedPreferences = await SharedPreferences.getInstance();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message,
+    {BuildContext? context}) async {
+  if (Platform.isAndroid) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+  print("Background or terminated app notification");
+
+  RemoteNotification? notification = message.notification;
+  AndroidNotification? android = message.notification?.android;
+  if (notification != null && android != null) {
+    showDialog(
+        context: context!,
+        builder: (_) {
+          return AlertDialog(
+            title: Text("${notification.title}"),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Text("${notification.body}")],
+              ),
+            ),
+          );
+        });
+  }
+
+  print('Handling a background message ${message.messageId}');
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel', // id
+  'High Importance Notifications', // title
+  description:
+      'This channel is used for important notifications.', // description
+  importance: Importance.high,
+);
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MyAppState extends State<MyApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    print("In app notification 0");
+
+    var initialzationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    // var initializationSettingsDarwin =
+    // DarwinInitializationSettings(onDidReceiveLocalNotification: onDidReceiveLocalNotification);
+    //
+    // void onDidReceiveLocalNotification(
+    //     int id, String title, String body, String payload) async {
+    //   print("Ios Notification Received");
+    //   // display a dialog with the notification details, tap ok to go to another page
+    //   // showDialog(
+    //   //   context: context,
+    //   //   builder: (BuildContext context) =>
+    //   //       CupertinoAlertDialog(
+    //   //         title: Text(title),
+    //   //         content: Text(body),
+    //   //         actions: [
+    //   //           CupertinoDialogAction(
+    //   //             isDefaultAction: true,
+    //   //             child: Text('Ok'),
+    //   //             onPressed: () async {
+    //   //               // Navigator.of(context, rootNavigator: true).pop();
+    //   //               // await Navigator.push(
+    //   //               //   context,
+    //   //               //   MaterialPageRoute(
+    //   //               //     builder: (context) => SecondScreen(payload),
+    //   //               //   ),
+    //   //               // );
+    //   //             },
+    //   //           )
+    //   //         ],
+    //   //       ),
+    //   // );
+    // }
+
+    final DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings();
+    print("In app notification 1");
+
+    var initializationSettings = InitializationSettings(
+        android: initialzationSettingsAndroid,
+        iOS: initializationSettingsDarwin);
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    print("In app notification 2");
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print("In app notification 3");
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+            notification.hashCode,
+            notification.title,
+            notification.body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                channel.id,
+                channel.name,
+                channelDescription: channel.description,
+                color: Colors.blue,
+                // TODO add a proper drawable resource to android, for now using
+                //      one that already exists in example app.
+                icon: "@mipmap/ic_launcher",
+              ),
+            ));
+      }
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print("Running app notification");
+
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+      if (notification != null && android != null) {
+        showDialog(
+            context: context,
+            builder: (_) {
+              return AlertDialog(
+                title: Text("${notification.title}"),
+                content: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [Text("${notification.body}")],
+                  ),
+                ),
+              );
+            });
+      }
+    });
+
+    getToken();
+  }
+
+  getToken() async {
+    print("fmc triggered ajsdlasjlda");
+    String? token = await FirebaseMessaging.instance.getToken();
+    //print('Device token is $token');
+    sharedPreferences.setString('fcmToken', "${token}");
+    http
+        .get(Uri.parse(RemoteUrls.registerWithToken(
+            sharedPreferences.getString('fcmToken') ?? '',
+            userId: '')))
+        .then((value) {
+      print("fcm token stored main ${sharedPreferences.getString('fcmToken')}");
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    return ScreenUtilInit(
+      designSize: const Size(344, 844),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return GetMaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: MyTheme.theme,
+          supportedLocales: AppLocalizationsSetup.supportedLocales,
+          localizationsDelegates: AppLocalizationsSetup.localizationsDelegate,
+          localeResolutionCallback:
+              AppLocalizationsSetup.localeResolutionCallBack,
+          // locale: const Locale('en'),
+          routingCallback: (routing) {
+            if (routing?.current == Routes.initial) {
+              if (kDebugMode) {
+                print(".................. main ................");
+              }
+            }
+          },
+          navigatorKey: _navigatorKey,
+          initialBinding: AppBindings(),
+          transitionDuration: const Duration(milliseconds: 300),
+          defaultTransition: Transition.cupertino,
+          home: Pages.initial,
+          getPages: Pages.pages,
+        );
+      },
     );
   }
 }
